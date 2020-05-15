@@ -1,7 +1,7 @@
 const formidable = require('formidable');
 const _ = require('lodash');
 const fs = require('fs');
-const { errorHandler } = require('../helpers/dbErrorHandler');
+const { errorHandler } = require('../helpers/dbErrorhandler');
 const Product = require('../models/product');
 
 
@@ -90,12 +90,12 @@ exports.update = (req, res) => {
             })
         }
 
-        const {name,description,price,category,quantity,shipping} = fields
+        // const {name,description,price,category,quantity,shipping} = fields
 
-        if(!name || !description || !price || !category || !quantity || !shipping )
-            return res.status(400).json({
-                error: "All fields are required"
-            });
+        // if(!name || !description || !price || !category || !quantity || !shipping )
+        //     return res.status(400).json({
+        //         error: "All fields are required"
+        //     });
         
         let product = req.product
             product = _.extend(product, fields)
@@ -246,3 +246,38 @@ exports.listSearch = (req, res) => {
 
     }
 }
+
+exports.decreaseQuantity = (req, res, next) => {
+    let bulkOps = req.body.order.products.map(item => {
+        return {
+            updateOne: {
+                filter: { _id: item._id },
+                update: { $inc: { quantity: -item.count, sold: +item.count }}
+            }
+        }
+    });
+
+    Product.bulkWrite(bulkOps, {}, (error,products) => {
+        if(error) {
+            return res.status(400).json({
+                error: "Could not update product"
+            })
+        }
+        next();
+    })
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
