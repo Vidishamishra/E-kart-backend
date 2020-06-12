@@ -1,3 +1,5 @@
+'use strict';
+
 const express = require('express');
 const mongoose = require('mongoose');
 const morgan = require('morgan');
@@ -17,14 +19,24 @@ const orderRoutes = require('./routes/order');
 // app
 const app = express();
 
+//unhandled-rejection- at initial approach to log error
+process.on('unhandledRejection', (reason, p) => {
+    console.error('Unhandled Rejection at:', p, 'reason:', reason)
+    process.exit(1)
+  });
+
+
+
+  
 // db
-mongoose
-    .connect(process.env.MONGO_URI, {
+mongoose.connect(process.env.MONGO_URI, {
         useNewUrlParser: true,
         useCreateIndex: true,
         useUnifiedTopology: true
-    })
-    .then(() => console.log('DB Connected'));
+    }) 
+    .then(() => console.log("DB connected"))
+    .catch(err => console.log('Caught', err.stack));
+
 
 // middlewares
 app.use(morgan('dev'));
@@ -41,6 +53,7 @@ app.use('/api', categoryRoutes);
 app.use('/api', productRoutes);
 app.use('/api', braintreeRoutes);
 app.use('/api', orderRoutes);
+
 
 const port = process.env.PORT || 8000;
 

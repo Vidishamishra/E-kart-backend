@@ -3,6 +3,15 @@ const _ = require('lodash');
 const fs = require('fs');
 const { errorHandler } = require('../helpers/dbErrorhandler');
 const Product = require('../models/product');
+const Rating = require('../models/rating');
+const Comment = require('../models/comment');
+const mongoose = require('mongoose'); 
+// const pdfParse = require('pdf-parse');
+const pdf2html = require('pdf2html');
+var PDFImage = require('pdf-image').PDFImage;
+// const pdftohtml = require('pdftohtmljs')
+
+
 
 
 exports.productById = (req, res, next, id) => {
@@ -21,6 +30,7 @@ exports.productById = (req, res, next, id) => {
 
 exports.read = (req, res) => {
     req.product.photo = undefined
+    req.product.pdf = undefined
     return res.json(req.product);
 }
 
@@ -50,20 +60,42 @@ exports.create = (req, res) => {
              }
             product.photo.data = fs.readFileSync(files.photo.path)
             product.photo.contentType = files.photo.type
+            console.log("inside photo setter");
         }
+         
+        //1.original flow
+        // if(files.pdf) {
+        //     product.pdf.data = fs.readFileSync(files.pdf.path)
+        //     product.pdf.contentType = files.pdf.type
+        // }
 
-        product.save((err, result) => {
-            if(err) {
-                return res.status(400).json({
-                    err
-                })
-            }
 
-            res.json(result);
-        })
+        //2.converting into html:- pdf2html (not set headers issue)
+
+
+        if(files.pdf) {
+            console.log("inside pdf setter");
+            console.log(files.pdf);
+            console.log("============================");
+            console.log(files.pdf.path);
+
+            var PDFImage = require("pdf-image").PDFImage;
+            var pdfImage = new PDFImage('sample.pdf');
+
+            pdfImage.convertPage(0).then(function (imagePath) {
+                res.sendFile(imagePath);
+            }, function (err) {
+                res.send(err, 500);
+            });
+        }
     
     })
 };
+
+
+
+
+
 
 exports.remove = (req, res) => {
     let product = req.product
@@ -228,6 +260,30 @@ exports.photo = (req, res, next) => {
     next();
 };
 
+// exports.pdfRead = (req, res, next) => {
+//     if(req.product.pdf.data) {
+//         // res.set('Content-Type', req.product.pdf.contentType)
+//        console.log(req.product.pdf);
+//        pdf2html.html('sample', (err, html) => {
+//         if(err) {
+//             return res.status(200).json({ err })
+//         } else {
+//             console.log(html);
+//         }
+//     })
+//     }
+//     next()
+// }
+
+exports.pdfRead = (req, res, next) => {
+    if(req.product.pdf.data) {
+        pdfParse(req.product.pdf.data).then(function(data) {
+            return res.send({data });
+        })
+    }
+    next();
+}
+
 exports.listSearch = (req, res) => {
     const query = {}
     if(req.query.search){
@@ -266,6 +322,195 @@ exports.decreaseQuantity = (req, res, next) => {
         next();
     })
 }
+
+exports.createRatings = (req, res) => {
+    const rating = parseInt(req.query.rating)
+
+    if (!rating)
+        return res.status(400).json({
+            error: "Cannot find rating"
+        });
+
+    const userId = req.profile.id;
+    const productId = req.product.id;
+    // console.log(typeof (productId));
+    // console.log(rating, userId, productId);
+
+    Rating.findOne({_userId: userId}, function(err, user){
+        if(!user){
+            const rate = new Rating({ rating: rating, _userId: userId, _productId: productId });
+            rate.save((err, data) => {
+                if (err) {
+                    res.status(400).json({
+                        err: "Rating could not be added!"
+                    })
+                }
+        
+                Rating.aggregate(
+                    [{ $match: { _productId: mongoose.Types.ObjectId(productId) } },
+                    {
+                        $group:
+                        {
+                            _id: "$_productId",
+                            averageRating: { $avg: "$rating" }
+                        }
+                    }]
+                ).exec((err, result) => {
+                    if (err) return res.status(400).json({
+                        err: err.message
+                    })
+                    // console.log(result);
+                    const {averageRating} = result[0];
+                    // console.log("avg rate of product", averageRating)
+                    Product.findOneAndUpdate({ _id: productId }, { rating: averageRating }, { new: true },
+                        (err, rating) => {
+                            if (err) {
+                                return res.status(400).json({
+                                    err: err.message
+                                })
+                            }
+                        })
+                        // console.log("avg rate of product", averageRating);
+                    return res.json({ result })
+                })
+            })
+        } else {
+            Rating.findOneAndUpdate({_userId: userId, _productId: productId}, {rating: rating},{new: true},
+                (err, response) => {
+                        if(err) return res.status(400).send("Rating not updated")
+                
+                Rating.aggregate(
+                    [{ $match: { _productId: mongoose.Types.ObjectId(productId) } },
+                    {
+                        $group:
+                        {
+                            _id: "$_productId",
+                            averageRating: { $avg: "$rating" }
+                        }
+                    }]
+                ).exec((err, result) => {
+                    if (err) return res.status(400).json({
+                        err: err.message
+                    })
+                    // console.log(result);
+                    const {averageRating} = result[0];
+                    // console.log("avg rate of product", averageRating)
+                    Product.findOneAndUpdate({ _id: productId }, { rating: averageRating }, { new: true },
+                        (err, rating) => {
+                            if (err) {
+                                return res.status(400).json({
+                                    err: err.message
+                                })
+                            }
+                        })
+                        // console.log("avg rate of product", averageRating);
+                    return res.json({ result })
+                })
+            })
+        }
+
+    })
+}
+
+exports.addComment = (req, res) => {
+    const userId = req.profile.id;
+    const username = req.profile.name;
+    const productId = req.product.id;
+
+    console.log(req.body);
+
+   Comment.findOne({_userId: userId}, (err, user) => {
+        if(!user){
+            
+            // console.log("the user who commented", username);
+            
+            const comment = new Comment({ Content: req.body.comment, _userId: userId, Username: username, _productId: productId});
+            comment.save((err, data) => {
+                if(err) {
+                    return res.status(400).json({
+                        error: err.message
+                    })
+                }
+                return res.status(200).json({ data })
+            })
+        } else {
+            Comment.findOneAndUpdate({_userId: userId, _productId: productId}, {Content: req.body.comment}, {new: true},
+                (error, result) => {
+                    if(error) {
+                        res.status(400).json({
+                            error: error.message
+                        })
+                    }
+                    return res.status(200).json({ result })
+                })
+        }
+   })
+}
+
+
+exports.viewComments = (req, res) => {
+   
+    Comment.find({_productId: req.product.id}, 'Content _userId Username', 
+        (err, result) => {
+            if(err) {
+                return res.status(400).json({
+                    error: err.message
+                })
+            }
+            return res.status(200).json(result)
+    })
+}
+
+// exports.calculateAvgRating = (req, res) => {
+  
+//     Rating.aggregate(
+//         [
+//             { $match: {_productId: req.query.id}},
+//             {
+//             $group: 
+//             {
+//                 _id: req.query.id,
+//                 avgrating: {$avg: req.query.rating}
+//             }
+//         }]
+//     ).exec((err, result) => {
+//             if(err) return res.status(400).json({
+//                 err: err.message
+//             })
+//         const {avgrating} = result
+//         // return res.json({rating : {avgrating}})
+//         Product.findOneAndUpdate({_id: productId}, {rating: avgrating },{ new: true },
+//             (err, rating) => {
+//                 if(err) {
+//                     return res.status(400).json({
+//                         err: err.message
+//                     })
+//                 }
+//                 return res.send("Rating updated")
+//             }
+            
+//          )
+//         })
+//    }
+
+ exports.displayProductRating = (req, res) => {
+     const productId = req.query.id;
+    
+      Product.findOne({_id: productId},{rating: req.query.rate},
+    (err, rating) => {
+        if(err) {
+            return res.status(400).json({
+                err: err.message
+            })
+        }
+        return res.send({rating})
+    }
+    
+ )
+ }
+
+
+
 
 
 

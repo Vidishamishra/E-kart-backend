@@ -36,10 +36,25 @@ const productSchema = new mongoose.Schema(
             data: Buffer,
             contentType: String
         },
+        pdf: {
+            data: Buffer,
+            contentType: String
+        },
         shipping: {
             required: false,
             type: Boolean
-        }
+         },
+        rating: {
+            type: Number,
+            default: 0,
+            ref: "Rating"
+         }
+        // comments :[
+        //     {
+        //         type: ObjectId,
+        //         ref: 'Comments'
+        //     }
+        // ],
     },
     { timestamps: true }
 )
