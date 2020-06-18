@@ -7,13 +7,12 @@ const Rating = require('../models/rating');
 const Comment = require('../models/comment');
 const mongoose = require('mongoose'); 
 // const pdfParse = require('pdf-parse');
-const pdf2html = require('pdf2html');
-var PDFImage = require('pdf-image').PDFImage;
+// const pdf2html = require('pdf2html');
 // const pdftohtml = require('pdftohtmljs')
 
 
 
-
+//middleware to attach product id to url params
 exports.productById = (req, res, next, id) => {
     Product.findById(id)
     .populate('category')
@@ -28,75 +27,66 @@ exports.productById = (req, res, next, id) => {
     })
 }
 
+//module to get single product
 exports.read = (req, res) => {
     req.product.photo = undefined
     req.product.pdf = undefined
     return res.json(req.product);
 }
 
+
+//creating a new product
 exports.create = (req, res) => {
-    let form = new formidable.IncomingForm()
-    form.keepExtensions = true
+    let form = new formidable.IncomingForm();
+    form.keepExtensions = true;
     form.parse(req, (err, fields, files) => {
-        if(err) {
+        if (err) {
             return res.status(400).json({
-                error: 'image could not be uploaded'
-            })
-        }
-
-        const {name,description,price,category,quantity,shipping} = fields
-
-        if(!name || !description || !price || !category || !quantity || !shipping )
-            return res.status(400).json({
-                error: "All fields are required"
+                error: 'Image could not be uploaded'
             });
+        }
         
-        let product = new Product(fields)
-        if(files.photo) {
-             if(files.photo.size > 1000000){
-                 return res.status(400).json({
-                     error: "image should be less than 1mb in size"
-                 });
-             }
-            product.photo.data = fs.readFileSync(files.photo.path)
-            product.photo.contentType = files.photo.type
-            console.log("inside photo setter");
-        }
-         
-        //1.original flow
-        // if(files.pdf) {
-        //     product.pdf.data = fs.readFileSync(files.pdf.path)
-        //     product.pdf.contentType = files.pdf.type
-        // }
+        const { name, description, price, category, quantity, shipping } = fields;
 
-
-        //2.converting into html:- pdf2html (not set headers issue)
-
-
-        if(files.pdf) {
-            console.log("inside pdf setter");
-            console.log(files.pdf);
-            console.log("============================");
-            console.log(files.pdf.path);
-
-            var PDFImage = require("pdf-image").PDFImage;
-            var pdfImage = new PDFImage('sample.pdf');
-
-            pdfImage.convertPage(0).then(function (imagePath) {
-                res.sendFile(imagePath);
-            }, function (err) {
-                res.send(err, 500);
+        if (!name || !description || !price || !category || !quantity || !shipping) {
+            return res.status(400).json({
+                error: 'All fields are required'
             });
         }
-    
-    })
+
+        let product = new Product(fields);
+
+        if (files.photo) {
+            if (files.photo.size > 1000000) {
+                return res.status(400).json({
+                    error: 'Image should be less than 1mb in size'
+                });
+            }
+            product.photo.data = fs.readFileSync(files.photo.path);
+            product.photo.contentType = files.photo.type;
+        }
+
+      if(files.pdf) {
+        product.pdf.data = fs.readFileSync(files.pdf.path);
+        product.pdf.contentType = files.pdf.type;
+      }
+
+        product.save((err, result) => {
+            if (err) {
+                console.log('PRODUCT CREATE ERROR ', err);
+                return res.status(400).json({
+                    error: errorHandler(err)
+                });
+            }
+            res.json(result);
+        });
+    });
 };
 
 
 
 
-
-
+//deleting a product
 exports.remove = (req, res) => {
     let product = req.product
     product.remove((err, deletedProduct) => {
@@ -112,6 +102,7 @@ exports.remove = (req, res) => {
     })
 }
 
+//updating the exixting product
 exports.update = (req, res) => {
     let form = new formidable.IncomingForm()
     form.keepExtensions = true
@@ -122,13 +113,6 @@ exports.update = (req, res) => {
             })
         }
 
-        // const {name,description,price,category,quantity,shipping} = fields
-
-        // if(!name || !description || !price || !category || !quantity || !shipping )
-        //     return res.status(400).json({
-        //         error: "All fields are required"
-        //     });
-        
         let product = req.product
             product = _.extend(product, fields)
 
@@ -141,6 +125,11 @@ exports.update = (req, res) => {
             product.photo.data = fs.readFileSync(files.photo.path)
             product.photo.contentType = files.photo.type
         }
+
+        if(files.pdf) {
+            product.pdf.data = fs.readFileSync(files.pdf.path);
+            product.pdf.contentType = files.pdf.type;
+          }
 
         product.save((err, result) => {
             if(err) {
@@ -155,7 +144,7 @@ exports.update = (req, res) => {
     })
 };
 
-
+//module for fetching products in home page
 exports.list = (req, res) => {
     let order = req.query.order ? req.query.order : 'asc'
     let sortBy = req.query.sortBy ? req.query.sortBy : '_id'
@@ -175,6 +164,27 @@ exports.list = (req, res) => {
                 res.json(products);
         })
 };
+
+
+exports.newlyAddedProduct = (req, res) => {
+    let order = req.query.order ? req.query.order : 'asc'
+    let sortBy = req.query.sortBy ? req.query.sortBy : '_id'
+    let limit = req.query.limit ? parseInt(req.query.limit) : 1
+
+    Product.find()
+        .select("-photo -pdf")
+        .populate('category')
+        .sort([[sortBy, order]])
+        .limit(limit)
+        .exec((err, products) => {
+                if(err) {
+                    return res.status(400).json({
+                        error: "Products not found"
+                    });
+                }
+                res.json(products);
+        })
+}
 
 exports.listRelated = (req, res) => {
     let limit = req.query.limit ? parseInt(req.query.limit) : 6;
@@ -203,9 +213,6 @@ exports.listCategories = (req, res) => {
     })
 };
 
-
-// route - make sure its post
-// router.post("/products/by/search", listBySearch);
  
 exports.listBySearch = (req, res) => {
     let order = req.body.order ? req.body.order : "desc";
@@ -214,9 +221,7 @@ exports.listBySearch = (req, res) => {
     let skip = parseInt(req.body.skip);
     let findArgs = {};
  
-    // console.log(order, sortBy, limit, skip, req.body.filters);
-    // console.log("findArgs", findArgs);
- 
+   
     for (let key in req.body.filters) {
         if (req.body.filters[key].length > 0) {
             if (key === "price") {
@@ -233,7 +238,7 @@ exports.listBySearch = (req, res) => {
     }
  
     Product.find(findArgs)
-        .select("-photo")
+        .select("-photo -pdf")
         .populate("category")
         .sort([[sortBy, order]])
         .skip(skip)
@@ -260,7 +265,7 @@ exports.photo = (req, res, next) => {
     next();
 };
 
-// exports.pdfRead = (req, res, next) => {
+// 1.exports.pdfRead = (req, res, next) => {
 //     if(req.product.pdf.data) {
 //         // res.set('Content-Type', req.product.pdf.contentType)
 //        console.log(req.product.pdf);
@@ -275,14 +280,22 @@ exports.photo = (req, res, next) => {
 //     next()
 // }
 
+// 2.exports.pdfRead = (req, res, next) => {
+//     if(req.product.pdf.data) {
+//         pdfParse(req.product.pdf.data).then(function(data) {
+//             return res.send({data });
+//         })
+//     }
+//     next();
+// }
+
 exports.pdfRead = (req, res, next) => {
     if(req.product.pdf.data) {
-        pdfParse(req.product.pdf.data).then(function(data) {
-            return res.send({data });
-        })
+        res.set('Content-Type', req.product.pdf.contentType)
+        return res.send(req.product.pdf.data);
     }
     next();
-}
+};
 
 exports.listSearch = (req, res) => {
     const query = {}
@@ -447,51 +460,23 @@ exports.addComment = (req, res) => {
    })
 }
 
+exports.fetchAllComments = (req, res) => {
+       let skip = parseInt(req.query.skip)
 
-exports.viewComments = (req, res) => {
-   
-    Comment.find({_productId: req.product.id}, 'Content _userId Username', 
-        (err, result) => {
-            if(err) {
-                return res.status(400).json({
-                    error: err.message
-                })
-            }
-            return res.status(200).json(result)
-    })
+    Comment.find({_productId: req.product.id}, 'Content _userId Username')
+       .skip(skip)
+       .limit(5)
+       .exec((err, result) => {
+        if(err) {
+            return res.status(400).json({
+                error: err.message
+            })
+        }
+        return res.status(200).json({result, size:result.length})
+       })
+
 }
 
-// exports.calculateAvgRating = (req, res) => {
-  
-//     Rating.aggregate(
-//         [
-//             { $match: {_productId: req.query.id}},
-//             {
-//             $group: 
-//             {
-//                 _id: req.query.id,
-//                 avgrating: {$avg: req.query.rating}
-//             }
-//         }]
-//     ).exec((err, result) => {
-//             if(err) return res.status(400).json({
-//                 err: err.message
-//             })
-//         const {avgrating} = result
-//         // return res.json({rating : {avgrating}})
-//         Product.findOneAndUpdate({_id: productId}, {rating: avgrating },{ new: true },
-//             (err, rating) => {
-//                 if(err) {
-//                     return res.status(400).json({
-//                         err: err.message
-//                     })
-//                 }
-//                 return res.send("Rating updated")
-//             }
-            
-//          )
-//         })
-//    }
 
  exports.displayProductRating = (req, res) => {
      const productId = req.query.id;

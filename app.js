@@ -28,7 +28,7 @@ process.on('unhandledRejection', (reason, p) => {
 
 
   
-// db
+// db connection
 mongoose.connect(process.env.MONGO_URI, {
         useNewUrlParser: true,
         useCreateIndex: true,

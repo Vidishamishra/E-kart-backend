@@ -7,7 +7,7 @@ const expressJwt = require('express-jwt');
 const { errorHandler } = require('../helpers/dbErrorHandler');
 
 
-
+//module for sign-up api
 exports.signup = (req, res) => {
 
     User.findOne({ email: req.body.email }, function (err, user) {
@@ -52,6 +52,7 @@ exports.signup = (req, res) => {
     })
 }
 
+//module for email verification of signed up user
 exports.verifyUser = (req, res) => {
     let userId = req.query.id;
     let verificationToken = req.query.token;
@@ -89,6 +90,7 @@ exports.verifyUser = (req, res) => {
     })
 }
 
+//module for logging in the user with verified account
 exports.signin = (req, res) => {
     // find the user based on email
     const { email, password } = req.body;
@@ -164,11 +166,13 @@ exports.signout = (req, res) => {
     res.json({ message: 'Signout success' });
 };
 
+//module for validating JWT and attach it to req payload
 exports.requireSignin = expressJwt({
     secret: process.env.JWT_SECRET,
     userProperty: 'auth'
 });
 
+//middleware:- match the user id in profile with req payload to check authenticity of user
 exports.isAuth = (req, res, next) => {
     let user = req.profile && req.auth && req.profile._id == req.auth._id;
     if (!user) {
@@ -179,6 +183,7 @@ exports.isAuth = (req, res, next) => {
     next();
 };
 
+//middleware:- to check user type/role for admin resource
 exports.isAdmin = (req, res, next) => {
     if(req.profile.role === 0) {
         return res.status(403).json({

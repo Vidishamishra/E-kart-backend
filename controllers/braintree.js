@@ -2,6 +2,7 @@ const User = require("../models/user")
 const braintree = require('braintree')
 require('dotenv').config()
 
+//payment gateway creation
 const gateway = braintree.connect({
     environment:braintree.Environment.Sandbox,
     merchantId: process.env.BRAINTREE_MERCHANT_ID,
@@ -9,6 +10,7 @@ const gateway = braintree.connect({
     privateKey: process.env.BRAINTREE_PRIVATE_KEY
 })
 
+//generating client token:- for authorization and configuration info to connect to communicate with gateway
 exports.generateToken = (req, res) => {
     gateway.clientToken.generate({}, function(err, response) {
         if (err) {
@@ -19,6 +21,7 @@ exports.generateToken = (req, res) => {
     })
 }
 
+//receive nonce and create a transaction
 exports.processPayment = (req, res) => {
     let nonceFromTheClient = req.body.paymentMethodNonce
     let amountFromTheClient = req.body.amount
